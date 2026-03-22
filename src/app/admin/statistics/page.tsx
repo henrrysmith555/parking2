@@ -112,24 +112,39 @@ export default function StatisticsPage() {
         });
       }
 
-      // 处理收入数据
-      if (revenueResult.data?.daily) {
-        const dailyData = revenueResult.data.daily;
-        const dates = Object.keys(dailyData).sort().slice(-7);
-        const formattedData = dates.map(date => ({
-          date: date.slice(5), // 只显示月-日
-          revenue: dailyData[date] || 0,
-          entries: 0,
-        }));
+      // 处理收入数据 - 确保始终显示完整的近七天日期
+      const processRevenueData = () => {
+        const today = new Date();
+        const last7Days: { date: string; revenue: number; entries: number }[] = [];
         
-        if (formattedData.length > 0) {
-          setRevenueData(formattedData);
-        } else {
-          setRevenueData(generateMockRevenueData());
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const dateStr = date.toISOString().split('T')[0];
+          const displayDate = `${date.getMonth() + 1}/${date.getDate()}`;
+          
+          // 如果API有数据，使用实际数据，否则为0
+          const dailyRevenue = revenueResult.data?.daily?.[dateStr] || 0;
+          
+          // 最后一天（今天）使用统计数据的当日收入
+          if (i === 0 && overviewData.data?.today?.revenue) {
+            last7Days.push({
+              date: displayDate,
+              revenue: overviewData.data.today.revenue,
+              entries: overviewData.data.today.entries || 0,
+            });
+          } else {
+            last7Days.push({
+              date: displayDate,
+              revenue: dailyRevenue,
+              entries: 0,
+            });
+          }
         }
-      } else {
-        setRevenueData(generateMockRevenueData());
-      }
+        return last7Days;
+      };
+      
+      setRevenueData(processRevenueData());
 
       // 处理车流量数据
       if (flowRes.ok) {
