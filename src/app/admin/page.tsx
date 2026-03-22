@@ -111,23 +111,39 @@ export default function AdminDashboard() {
       setStats(statsResult.data);
       setUserCount(usersResult.data?.length || 0);
       
-      // 处理收入数据
-      if (revenueResult.data?.daily) {
-        const dailyData = revenueResult.data.daily;
-        const dates = Object.keys(dailyData).sort().slice(-7);
-        if (dates.length > 0) {
-          const formattedData = dates.map(date => ({
-            date: new Date(date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }),
-            revenue: dailyData[date] || 0,
-            entries: 0,
-          }));
-          setRevenueData(formattedData);
-        } else {
-          setRevenueData(generateMockRevenueData());
+      // 处理收入数据 - 确保始终显示完整的近七天日期
+      const processRevenueData = () => {
+        const today = new Date();
+        const last7Days: { date: string; revenue: number; entries: number }[] = [];
+        
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const dateStr = date.toISOString().split('T')[0];
+          const displayDate = `${date.getMonth() + 1}/${date.getDate()}`;
+          
+          // 如果API有数据，使用实际数据，否则为0
+          const dailyRevenue = revenueResult.data?.daily?.[dateStr] || 0;
+          
+          // 最后一天（今天）使用统计数据的当日收入
+          if (i === 0 && statsResult.data?.today?.revenue) {
+            last7Days.push({
+              date: displayDate,
+              revenue: statsResult.data.today.revenue,
+              entries: statsResult.data.today.entries || 0,
+            });
+          } else {
+            last7Days.push({
+              date: displayDate,
+              revenue: dailyRevenue,
+              entries: 0,
+            });
+          }
         }
-      } else {
-        setRevenueData(generateMockRevenueData());
-      }
+        return last7Days;
+      };
+      
+      setRevenueData(processRevenueData());
 
       // 处理车流量数据
       if (flowResult.data?.hourly) {
@@ -144,17 +160,26 @@ export default function AdminDashboard() {
     }
   };
 
-  // 生成模拟收入数据
+  // 生成模拟收入数据（动态计算近七天日期）
   const generateMockRevenueData = () => {
-    return [
-      { date: '3/9', revenue: 120, entries: 12 },
-      { date: '3/10', revenue: 180, entries: 18 },
-      { date: '3/11', revenue: 95, entries: 10 },
-      { date: '3/12', revenue: 220, entries: 22 },
-      { date: '3/13', revenue: 150, entries: 15 },
-      { date: '3/14', revenue: 280, entries: 28 },
-      { date: '3/15', revenue: stats?.today.revenue || 50, entries: stats?.today.entries || 5 },
-    ];
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (6 - i));
+      // 最后一天使用今天的实际数据
+      if (i === 6) {
+        return {
+          date: `${date.getMonth() + 1}/${date.getDate()}`,
+          revenue: stats?.today.revenue || 50,
+          entries: stats?.today.entries || 5,
+        };
+      }
+      return {
+        date: `${date.getMonth() + 1}/${date.getDate()}`,
+        revenue: Math.floor(Math.random() * 200) + 50,
+        entries: Math.floor(Math.random() * 20) + 5,
+      };
+    });
   };
 
   // 生成模拟车流量数据
