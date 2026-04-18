@@ -27,7 +27,7 @@ export default function Sidebar() {
   return (
     <div className="flex h-full w-64 flex-col bg-gray-900 text-white">
       <div className="flex h-16 items-center justify-center border-b border-gray-800">
-        <h1 className="text-lg font-bold">酒店停车场车位远程监测与管理系统</h1>
+        <h1 className="text-lg font-bold">酒店停车场车位管理系统</h1>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
