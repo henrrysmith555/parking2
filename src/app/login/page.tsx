@@ -117,8 +117,8 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
             <Car className="h-8 w-8 text-blue-600" />
           </div>
-          <CardTitle className="text-2xl font-bold">酒店停车场车位远程监测与管理系统</CardTitle>
-          <p className="text-sm text-gray-500">远程监测与智能管理平台</p>
+          <CardTitle className="text-2xl font-bold">酒店停车场车位管理系统</CardTitle>
+          <p className="text-sm text-gray-500">智能管理平台</p>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
