@@ -86,7 +86,7 @@ export default function AdminLayout({
       <div className="flex w-72 flex-col bg-slate-100 text-slate-800 border-r border-slate-200">
         <div className="flex h-16 items-center justify-center border-b border-slate-200 px-3 bg-white">
           <h1 className="text-base font-semibold text-blue-600 tracking-wide leading-tight text-center">
-            酒店停车场车位远程监测与管理系统
+            酒店停车场车位管理系统
           </h1>
         </div>
         <div className="border-b border-slate-200 p-4 bg-white">
