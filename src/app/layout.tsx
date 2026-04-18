@@ -3,10 +3,10 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: '酒店停车场车位远程监测与管理系统',
-    template: '%s | 酒店停车场车位远程监测与管理系统',
+    default: '酒店停车场车位管理系统',
+    template: '%s | 酒店停车场车位管理系统',
   },
-  description: '酒店停车场车位远程监测与管理系统',
+  description: '酒店停车场车位管理系统',
 };
 
 export default function RootLayout({
