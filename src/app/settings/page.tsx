@@ -53,7 +53,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex items-center justify-between rounded-lg border p-3">
             <span className="text-sm font-medium">毕业设计</span>
-            <span className="text-sm text-gray-600">酒店停车场车位远程监测与管理系统</span>
+            <span className="text-sm text-gray-600">酒店停车场车位管理系统</span>
           </div>
         </CardContent>
       </Card>
