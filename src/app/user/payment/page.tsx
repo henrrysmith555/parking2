@@ -42,7 +42,7 @@ import {
   LineChart,
   Line,
 } from 'recharts';
-import { Wallet, Plus, CreditCard, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Wallet, Plus, CreditCard, TrendingUp, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface User {
@@ -71,6 +71,19 @@ interface PaymentRecord {
   created_at: string;
 }
 
+interface UnpaidRecord {
+  id: string;
+  plate_number: string;
+  lot_name: string;
+  spot_info: string;
+  entry_time: string;
+  exit_time: string | null;
+  duration: number;
+  duration_text: string;
+  fee: number;
+  created_at: string;
+}
+
 const PAGE_SIZE = 5;
 
 export default function UserPayment() {
@@ -78,10 +91,14 @@ export default function UserPayment() {
   const [user, setUser] = useState<User | null>(null);
   const [rechargeRecords, setRechargeRecords] = useState<RechargeRecord[]>([]);
   const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
+  const [unpaidRecords, setUnpaidRecords] = useState<UnpaidRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [rechargeDialogOpen, setRechargeDialogOpen] = useState(false);
+  const [payDialogOpen, setPayDialogOpen] = useState(false);
+  const [selectedUnpaid, setSelectedUnpaid] = useState<UnpaidRecord | null>(null);
   const [rechargeAmount, setRechargeAmount] = useState('100');
   const [paymentMethod, setPaymentMethod] = useState('alipay');
+  const [paying, setPaying] = useState(false);
   
   // 分页状态
   const [rechargePage, setRechargePage] = useState(1);
@@ -104,18 +121,21 @@ export default function UserPayment() {
 
   const fetchRecords = async (userId: string) => {
     try {
-      const [rechargeRes, paymentRes, userRes] = await Promise.all([
+      const [rechargeRes, paymentRes, userRes, unpaidRes] = await Promise.all([
         fetch(`/api/recharge?userId=${userId}`),
         fetch(`/api/payment?userId=${userId}`),
         fetch(`/api/users/${userId}`),
+        fetch(`/api/unpaid?userId=${userId}`),
       ]);
       
       const rechargeResult = await rechargeRes.json();
       const paymentResult = await paymentRes.json();
       const userResult = await userRes.json();
+      const unpaidResult = await unpaidRes.json();
       
       setRechargeRecords(rechargeResult.data || []);
       setPaymentRecords(paymentResult.data || []);
+      setUnpaidRecords(unpaidResult.data || []);
       
       // 更新用户余额
       if (userResult.data) {
@@ -156,6 +176,51 @@ export default function UserPayment() {
       }
     } catch (error) {
       console.error('Failed to recharge:', error);
+    }
+  };
+
+  // 缴纳停车费
+  const handlePayParkingFee = async () => {
+    if (!user || !selectedUnpaid) return;
+    
+    setPaying(true);
+    try {
+      const response = await fetch('/api/payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          reservationId: selectedUnpaid.id,
+          plateNumber: selectedUnpaid.plate_number,
+          amount: selectedUnpaid.fee.toString(),
+          paymentMethod: 'balance',
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // 更新用户余额
+        const newBalance = parseFloat(user.balance) - selectedUnpaid.fee;
+        const updatedUser = { ...user, balance: newBalance.toFixed(2) };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        
+        fetchRecords(user.id);
+        setPayDialogOpen(false);
+        setSelectedUnpaid(null);
+        alert('缴费成功！');
+        
+        // 通知管理员端刷新
+        window.dispatchEvent(new Event('admin-refresh'));
+      } else {
+        alert(result.error || '缴费失败');
+      }
+    } catch (error) {
+      console.error('Failed to pay:', error);
+      alert('缴费失败，请稍后重试');
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -368,6 +433,113 @@ export default function UserPayment() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 未缴费停车记录 */}
+      {unpaidRecords.length > 0 && (
+        <Card className="border-orange-500 border-2">
+          <CardHeader className="bg-orange-50">
+            <CardTitle className="flex items-center justify-between text-orange-600">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5" />
+                待缴费停车记录 ({unpaidRecords.length}条)
+              </div>
+              <span className="text-xl">共计: ¥{unpaidRecords.reduce((sum, r) => sum + r.fee, 0).toFixed(2)}</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="space-y-3">
+              {unpaidRecords.map((record) => (
+                <div key={record.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
+                  <div>
+                    <p className="font-medium text-orange-600">¥{record.fee.toFixed(2)}</p>
+                    <p className="text-sm text-gray-600">{record.plate_number}</p>
+                    <p className="text-xs text-gray-500">
+                      {record.lot_name} - {record.spot_info}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      停车时长: {record.duration_text}
+                    </p>
+                  </div>
+                  <div className="text-right flex flex-col items-end gap-2">
+                    <Badge variant="outline" className="bg-orange-100 text-orange-600 border-orange-300">
+                      待缴费
+                    </Badge>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                      onClick={() => {
+                        setSelectedUnpaid(record);
+                        setPayDialogOpen(true);
+                      }}
+                    >
+                      立即缴费
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 缴费确认对话框 */}
+      <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认缴费</DialogTitle>
+            <DialogDescription>
+              您确定要缴纳以下停车费用吗？
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUnpaid && (
+            <div className="py-4">
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">车牌号码:</span>
+                  <span className="font-medium">{selectedUnpaid.plate_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">停车场:</span>
+                  <span>{selectedUnpaid.lot_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">车位:</span>
+                  <span>{selectedUnpaid.spot_info}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">停车时长:</span>
+                  <span>{selectedUnpaid.duration_text}</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold pt-2 border-t">
+                  <span>应付金额:</span>
+                  <span className="text-orange-600">¥{selectedUnpaid.fee.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">当前余额:</span>
+                  <span>¥{parseFloat(user?.balance || '0').toFixed(2)}</span>
+                </div>
+              </div>
+              {parseFloat(user?.balance || '0') < selectedUnpaid.fee && (
+                <p className="text-red-500 text-sm mt-2">
+                  余额不足，请先充值后再缴费
+                </p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayDialogOpen(false)}>
+              取消
+            </Button>
+            <Button 
+              onClick={handlePayParkingFee}
+              disabled={paying || !user || parseFloat(user?.balance || '0') < (selectedUnpaid?.fee || 0)}
+            >
+              {paying ? '缴费中...' : '确认缴费'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 消费统计图表 */}
       <Card>
