@@ -137,12 +137,16 @@ export default function UserRecords() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'pending':
+        return <Badge variant="default" className="bg-orange-500">预约中</Badge>;
       case 'confirmed':
         return <Badge variant="default" className="bg-blue-500">停车中</Badge>;
       case 'completed':
         return <Badge variant="outline" className="border-green-500 text-green-600">已完成</Badge>;
       case 'cancelled':
         return <Badge variant="destructive">已取消</Badge>;
+      case 'timeout':
+        return <Badge variant="destructive" className="bg-red-400">超时未到</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
