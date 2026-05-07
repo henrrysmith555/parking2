@@ -144,12 +144,18 @@ export default function ReservationsPage() {
         method: 'DELETE',
       });
 
+      const result = await response.json();
+      
       if (response.ok) {
         await logUtils.reservationDelete(id);
         fetchReservations(statusFilter === 'all' ? undefined : statusFilter);
+        alert('预约已取消');
+      } else {
+        alert(result.error || '取消失败，请重试');
       }
     } catch (error) {
       console.error('Failed to cancel reservation:', error);
+      alert('取消失败，请重试');
     }
   };
 
