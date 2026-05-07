@@ -42,8 +42,9 @@ export default function HotelMap() {
         fetchSpots(selectedLot);
       }
     };
-    window.addEventListener('admin-refresh', handleRefresh);
-    return () => window.removeEventListener('admin-refresh', handleRefresh);
+    window.addEventListener('spots-updated', handleRefresh);
+
+    return () => window.removeEventListener('spots-updated', handleRefresh);
   }, []);
 
   const fetchLots = async () => {
@@ -78,6 +79,16 @@ export default function HotelMap() {
     }
   }, [selectedLot]);
 
+  // 定时刷新车位状态（每10秒刷新一次）
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (selectedLot) {
+        fetchSpots(selectedLot);
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [selectedLot]);
+
   const filteredSpots = spots.filter(s => s.floor === selectedFloor);
 
   const getStatusColor = (status: string) => {
@@ -95,7 +106,7 @@ export default function HotelMap() {
       case 'available': return '✓';  // 空闲
       case 'occupied': return '🚗';   // 占用
       case 'maintenance': return '🔧'; // 维护
-      default: return '';
+      default: return '✓';  // 默认显示空闲
     }
   };
 
@@ -129,7 +140,8 @@ export default function HotelMap() {
   const getSpotTypeColor = (type: string, status: string) => {
     if (status === 'maintenance') return 'bg-gray-500';
     if (status === 'occupied') return 'bg-red-500';
-    
+    // 预约中保持空闲状态显示，不单独标记
+
     // 空闲状态下，根据类型显示不同颜色
     switch (type) {
       case 'charging': return 'bg-green-400';  // 充电位 - 浅绿色
