@@ -7,7 +7,84 @@ export async function GET() {
     const client = getSupabaseClient();
     const now = new Date();
 
-    // 查询所有confirmed状态的预约
+    // 1. 处理pending状态的预约：预约时间到了自动转为confirmed并占用车位
+    const { data: pendingReservations, error: pendingError } = await client
+      .from('reservations')
+      .select('*')
+      .eq('status', 'pending');
+
+    if (pendingError) {
+      console.error('Check pending error:', pendingError);
+      return NextResponse.json({ error: pendingError.message }, { status: 500 });
+    }
+
+    let activatedCount = 0;
+    const activatedReservations: string[] = [];
+
+    for (const reservation of pendingReservations || []) {
+      if (!reservation.start_time || !reservation.spot_id) continue;
+
+      const startTime = new Date(reservation.start_time);
+
+      // 如果预约开始时间 <= 当前时间，自动激活预约
+      if (startTime.getTime() <= now.getTime()) {
+        // 1. 更新预约状态为confirmed
+        await client
+          .from('reservations')
+          .update({ status: 'confirmed' })
+          .eq('id', reservation.id);
+
+        // 2. 更新车位状态为occupied
+        await client
+          .from('parking_spots')
+          .update({ status: 'occupied', updated_at: now.toISOString() })
+          .eq('id', reservation.spot_id);
+
+        // 3. 创建车辆入场记录
+        await client.from('vehicle_records').insert({
+          user_id: reservation.user_id,
+          plate_number: reservation.plate_number,
+          spot_id: reservation.spot_id,
+          lot_id: reservation.lot_id,
+          vehicle_type: 'sedan',
+          entry_time: now.toISOString(),
+          status: 'parked',
+          reservation_id: reservation.id,
+        });
+
+        // 4. 更新停车场可用车位
+        const { data: lot } = await client
+          .from('parking_lots')
+          .select('available_spots')
+          .eq('id', reservation.lot_id)
+          .single();
+
+        if (lot && lot.available_spots > 0) {
+          await client
+            .from('parking_lots')
+            .update({ available_spots: lot.available_spots - 1 })
+            .eq('id', reservation.lot_id);
+        }
+
+        // 5. 记录操作日志
+        await client.from('operation_logs').insert({
+          user_id: reservation.user_id || 'system',
+          action: 'activate',
+          module: 'reservation',
+          description: `预约时间到达，车位自动激活，车牌${reservation.plate_number}`,
+          details: JSON.stringify({
+            reservationId: reservation.id,
+            spotId: reservation.spot_id,
+            startTime: reservation.start_time,
+          }),
+        });
+
+        activatedCount++;
+        activatedReservations.push(reservation.id);
+      }
+    }
+
+    // 2. 处理confirmed状态的预约：检查是否超时30分钟未到场
     const { data: reservations, error } = await client
       .from('reservations')
       .select('*')
@@ -99,7 +176,8 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      message: `检查完成，释放了 ${releasedCount} 个超时车位`,
+      message: `检查完成，激活了 ${activatedCount} 个预约，释放了 ${releasedCount} 个超时车位`,
+      activated: activatedReservations,
       released: releasedReservations,
       checkedAt: now.toISOString(),
     });
