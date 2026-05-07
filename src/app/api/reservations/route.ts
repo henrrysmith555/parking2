@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     const body = await request.json();
-    const { userId, plateNumber, lotId, spotId, startTime } = body;
+    const { userId, plateNumber, lotId, spotId, startTime, scheduledTime } = body;
 
     if (!userId || !plateNumber || !lotId) {
       return NextResponse.json(
@@ -180,7 +180,12 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const entryTime = startTime || now.toISOString();
     
-    // 创建预约 - 直接确认为 confirmed 状态
+    // 判断是预约停车还是立即停车
+    const isScheduled = !!scheduledTime;
+    const reservationStatus = isScheduled ? 'pending' : 'confirmed';
+    const reservationStartTime = isScheduled ? scheduledTime : entryTime;
+    
+    // 创建预约
     const { data: reservation, error: resError } = await client
       .from('reservations')
       .insert({
@@ -189,8 +194,8 @@ export async function POST(request: NextRequest) {
         lot_id: lotId,
         spot_id: spotId || null,
         reservation_time: now.toISOString(),
-        start_time: entryTime,
-        status: 'confirmed',
+        start_time: reservationStartTime,
+        status: reservationStatus,
       })
       .select()
       .single();
@@ -200,8 +205,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: resError.message }, { status: 500 });
     }
 
-    // 如果选择了车位，更新车位状态为占用并创建车辆入场记录
-    if (spotId) {
+    // 预约停车：车位状态保持空闲（available），预约时间到达后才变为占用
+
+    // 如果是立即停车（非预约），则创建车辆入场记录
+    if (!isScheduled && spotId) {
       // 更新车位状态
       await client
         .from('parking_spots')
@@ -221,20 +228,20 @@ export async function POST(request: NextRequest) {
           status: 'parked',
           reservation_id: reservation.id,
         });
-    }
 
-    // 更新停车场可用车位
-    const { data: lot } = await client
-      .from('parking_lots')
-      .select('available_spots')
-      .eq('id', lotId)
-      .single();
-
-    if (lot && lot.available_spots > 0) {
-      await client
+      // 更新停车场可用车位
+      const { data: lot } = await client
         .from('parking_lots')
-        .update({ available_spots: lot.available_spots - 1 })
-        .eq('id', lotId);
+        .select('available_spots')
+        .eq('id', lotId)
+        .single();
+
+      if (lot && lot.available_spots > 0) {
+        await client
+          .from('parking_lots')
+          .update({ available_spots: lot.available_spots - 1 })
+          .eq('id', lotId);
+      }
     }
 
     // 记录操作日志
