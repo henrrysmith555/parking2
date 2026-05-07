@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '20');
-    const module = searchParams.get('module');
+    const moduleParam = searchParams.get('module');
     const action = searchParams.get('action');
     const userId = searchParams.get('userId');
 
@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
       .range(from, to);
 
     // 添加过滤条件
-    if (module) {
-      query = query.eq('module', module);
+    if (moduleParam) {
+      query = query.eq('module', moduleParam);
     }
     if (action) {
       query = query.eq('action', action);
