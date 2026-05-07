@@ -21,6 +21,13 @@ export async function GET(request: NextRequest) {
     if (status) {
       query = query.eq('status', status);
     }
+    
+    // 处理 parked=true 参数，返回在场车辆
+    const parked = searchParams.get('parked');
+    if (parked === 'true') {
+      query = query.eq('status', 'parked');
+    }
+    
     if (plateNumber) {
       query = query.ilike('plate_number', `%${plateNumber}%`);
     }
