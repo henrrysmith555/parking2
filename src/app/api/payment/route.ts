@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     const body = await request.json();
-    const { userId, recordId, plateNumber, amount, paymentMethod } = body;
+    const { userId, recordId, reservationId, plateNumber, amount, paymentMethod } = body;
 
     if (!userId || !amount || !paymentMethod) {
       return NextResponse.json(
@@ -95,6 +95,22 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // 如果有预约ID，更新预约状态为已完成
+    if (reservationId) {
+      await client
+        .from('reservations')
+        .update({ status: 'completed' })
+        .eq('id', reservationId);
+    }
+
+    // 更新车辆记录状态为已完成
+    if (reservationId) {
+      await client
+        .from('vehicle_records')
+        .update({ status: 'completed' })
+        .eq('reservation_id', reservationId);
     }
 
     return NextResponse.json({
