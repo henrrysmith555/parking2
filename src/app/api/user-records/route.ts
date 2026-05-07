@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 4. 计算统计数据
+    // 4. 计算统计数据（只统计已完成的预约）
     const completedReservations = (reservations || []).filter(r => r.status === 'completed');
     
     // 停车次数（已完成的预约）
@@ -109,8 +109,12 @@ export async function GET(request: NextRequest) {
     // 累计消费（从 payment_records 实际支付金额计算）
     const totalFee = (payments || []).reduce((sum, p) => sum + parseNumeric(p.amount), 0);
 
-    // 5. 格式化停车记录
-    const records = (reservations || []).map(r => {
+    // 5. 格式化停车记录（只显示已完成的历史记录，不包括预约中和停车中的记录）
+    // pending: 预约中, confirmed: 停车中 - 这些不在停车记录中显示
+    const historicalStatuses = ['completed', 'cancelled', 'timeout'];
+    const records = (reservations || [])
+      .filter(r => historicalStatuses.includes(r.status)) // 只显示历史记录
+      .map(r => {
       let duration = null;
       let fee = null;
       let operatorType = 'user'; // 默认用户自助
