@@ -18,7 +18,7 @@ import {
   FileText,
   RefreshCw,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 
 const navigation = [
@@ -41,6 +41,7 @@ export default function AdminLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<{ name: string; username: string } | null>(null);
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -50,7 +51,9 @@ export default function AdminLayout({
         if (userData.role !== 'admin') {
           router.push('/login');
         } else {
-          setUser(userData);
+          startTransition(() => {
+            setUser(userData);
+          });
         }
       } catch {
         router.push('/login');
