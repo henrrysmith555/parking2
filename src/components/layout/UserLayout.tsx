@@ -13,7 +13,7 @@ import {
   Map,
   Lock,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 
 const navigation = [
   { name: '个人中心', href: '/user', icon: User },
@@ -32,6 +32,7 @@ export default function UserLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<{ name: string; username: string } | null>(null);
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -41,7 +42,9 @@ export default function UserLayout({
         if (userData.role === 'admin') {
           router.push('/admin');
         } else {
-          setUser(userData);
+          startTransition(() => {
+            setUser(userData);
+          });
         }
       } catch {
         router.push('/login');
