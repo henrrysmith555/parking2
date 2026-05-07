@@ -42,6 +42,7 @@ interface Reservation {
   start_time: string;
   end_time: string | null;
   status: string;
+  reservation_time?: string;
   parking_lots?: {
     id: string;
     name: string;
@@ -92,20 +93,28 @@ export default function UserCenter() {
         localStorage.setItem('user', JSON.stringify(userResult.data));
       }
       
-      // 获取已确认的预约记录
+      // 获取预约/停车记录（包括pending预约和confirmed停车）
       const reservationRes = await fetch(`/api/reservations?userId=${userId}`);
       const reservationResult = await reservationRes.json();
       
       console.log('Reservation data:', reservationResult.data);
       
-      // 找到已确认的预约
+      // 优先显示预约中的预约（pending），其次是停车中的预约（confirmed）
+      const pendingReservation = reservationResult.data?.find(
+        (r: { status: string }) => r.status === 'pending'
+      );
+      
       const confirmedReservation = reservationResult.data?.find(
         (r: { status: string }) => r.status === 'confirmed'
       );
       
+      console.log('Pending reservation:', pendingReservation);
       console.log('Confirmed reservation:', confirmedReservation);
       
-      if (confirmedReservation) {
+      // 优先显示预约中的预约，如果没有则显示停车中的预约
+      if (pendingReservation) {
+        setCurrentReservation(pendingReservation);
+      } else if (confirmedReservation) {
         setCurrentReservation(confirmedReservation);
       } else {
         setCurrentReservation(null);
@@ -213,39 +222,27 @@ export default function UserCenter() {
       const result = await response.json();
       
       if (response.ok && result.success) {
-        // 更新本地用户信息
-        const updatedUser = {
-          ...user,
-          balance: result.data?.newBalance || user.balance,
-        };
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
+        // 清除当前预约
+        setCurrentReservation(null);
         
         // 触发全局刷新事件，通知其他页面更新
         window.dispatchEvent(new CustomEvent('parkingEnded', { 
           detail: { fee: result.data?.fee, duration: result.data?.duration } 
         }));
+        // 通知管理员端刷新车辆进出列表
+        window.dispatchEvent(new Event('admin-refresh'));
         
-        // 清除当前预约
-        setCurrentReservation(null);
-        
-        // 显示成功信息
-        const confirmView = confirm(
+        // 显示成功信息，提示用户去缴费
+        alert(
           `🎉 停车结束成功！\n\n` +
           `📍 车位：${currentReservation.parking_spots?.spot_number || '-'}\n` +
           `⏱️ 停车时长：${parkingDuration}\n` +
-          `💰 费用：¥${result.data?.fee}\n` +
-          `💳 支付方式：余额支付\n` +
-          `💵 剩余余额：¥${result.data?.newBalance}\n\n` +
-          `是否查看停车记录？`
+          `💰 应付费用：¥${result.data?.fee}\n\n` +
+          `⚠️ 请前往"充值缴费"页面完成停车费缴纳`
         );
         
-        if (confirmView) {
-          router.push('/user/records');
-        } else {
-          // 刷新用户数据
-          fetchUserInfo(user.id);
-        }
+        // 跳转到充值缴费页面
+        router.push('/user/payment');
       } else {
         // 检查是否是余额不足
         if (result.error?.includes('余额不足')) {
@@ -258,6 +255,45 @@ export default function UserCenter() {
     } catch (error) {
       console.error('Failed to end parking:', error);
       alert('结束停车失败，请重试');
+    } finally {
+      setEndingParking(false);
+    }
+  };
+
+  // 取消预约
+  const handleCancelReservation = async () => {
+    if (!currentReservation || !user) return;
+    
+    if (!confirm('确定要取消这个预约吗？')) {
+      return;
+    }
+    
+    setEndingParking(true); // 复用loading状态
+    
+    try {
+      const response = await fetch(`/api/reservations/${currentReservation.id}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+      
+      if (response.ok && result.success) {
+        // 清除当前预约
+        setCurrentReservation(null);
+        
+        // 刷新用户数据
+        fetchUserInfo(user.id);
+        
+        alert('预约已成功取消');
+        
+        // 触发全局刷新事件
+        window.dispatchEvent(new CustomEvent('reservationCancelled'));
+      } else {
+        alert(result.error || '取消预约失败');
+      }
+    } catch (error) {
+      console.error('Failed to cancel reservation:', error);
+      alert('取消预约失败，请重试');
     } finally {
       setEndingParking(false);
     }
@@ -295,72 +331,186 @@ export default function UserCenter() {
         </div>
       </div>
 
-      {/* 当前停车状态 */}
+      {/* 当前预约/停车状态 */}
       {currentReservation && (
-        <Card className="border-l-4 border-l-orange-500 bg-gradient-to-r from-orange-50 to-amber-50">
+        <Card className={`border-l-4 ${currentReservation.status === 'pending' ? 'border-l-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50' : 'border-l-orange-500 bg-gradient-to-r from-orange-50 to-amber-50'}`}>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-orange-700">
+            <CardTitle className={`flex items-center gap-2 ${currentReservation.status === 'pending' ? 'text-blue-700' : 'text-orange-700'}`}>
               <Car className="h-5 w-5" />
-              当前停车状态
-              <Badge variant="default" className="ml-2 animate-pulse">停车中</Badge>
+              {currentReservation.status === 'pending' ? '已预约车位' : '当前停车状态'}
+              <Badge variant="default" className="ml-2 animate-pulse">
+                {currentReservation.status === 'pending' ? '待入场' : '停车中'}
+              </Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-gray-700">
-                  <Car className="h-4 w-4 text-gray-500" />
-                  <span className="text-gray-500">车牌号：</span>
-                  <span className="font-semibold">{currentReservation.plate_number}</span>
-                </div>
-                <div className="flex items-center gap-2 text-gray-700">
-                  <MapPin className="h-4 w-4 text-gray-500" />
-                  <span className="text-gray-500">停车场：</span>
-                  <span className="font-semibold">{currentReservation.parking_lots?.name || '-'}</span>
-                </div>
-                {currentReservation.parking_spots && (
-                  <div className="flex items-center gap-2 text-gray-700">
-                    <MapPin className="h-4 w-4 text-gray-500" />
-                    <span className="text-gray-500">车位位置：</span>
-                    <span className="font-semibold">
-                      {currentReservation.parking_spots.floor}层 {currentReservation.parking_spots.zone}区 
-                      {currentReservation.parking_spots.spot_number}号
-                    </span>
+          <CardContent className="space-y-5">
+            {/* 预约信息详情卡片 */}
+            <div className={`bg-white rounded-xl p-5 border shadow-sm ${currentReservation.status === 'pending' ? 'border-blue-100' : 'border-orange-100'}`}>
+              <div className="flex items-center gap-2 mb-4">
+                <CalendarCheck className={`h-5 w-5 ${currentReservation.status === 'pending' ? 'text-blue-500' : 'text-orange-500'}`} />
+                <span className="font-semibold text-gray-800">
+                  {currentReservation.status === 'pending' ? '预约详情' : '停车详情'}
+                </span>
+              </div>
+              
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* 左侧信息 */}
+                <div className="space-y-4">
+                  {/* 车牌号 */}
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Car className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">车牌号码</div>
+                      <div className="font-bold text-gray-900">{currentReservation.plate_number}</div>
+                    </div>
                   </div>
-                )}
-                <div className="flex items-center gap-2 text-gray-700">
-                  <Clock className="h-4 w-4 text-gray-500" />
-                  <span className="text-gray-500">开始时间：</span>
-                  <span className="font-semibold">
-                    {new Date(currentReservation.start_time).toLocaleString('zh-CN')}
-                  </span>
+                  
+                  {/* 停车场 */}
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <MapPin className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">停车场</div>
+                      <div className="font-bold text-gray-900">{currentReservation.parking_lots?.name || '-'}</div>
+                      <div className="text-xs text-gray-400">{currentReservation.parking_lots?.location}</div>
+                    </div>
+                  </div>
+                  
+                  {/* 车位信息 */}
+                  {currentReservation.parking_spots && (
+                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                      <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <MapPin className="h-5 w-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500">预约车位</div>
+                        <div className="font-bold text-gray-900">
+                          {currentReservation.parking_spots.floor}层 {currentReservation.parking_spots.zone}区 {currentReservation.parking_spots.spot_number}号
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          车位编号：{currentReservation.parking_spots.spot_number}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div className="space-y-3">
-                <div className="p-4 bg-white rounded-lg border border-orange-200">
-                  <div className="text-sm text-gray-500 mb-1">已停时长</div>
-                  <div className="text-2xl font-bold text-orange-600">{parkingDuration}</div>
-                </div>
-                <div className="p-4 bg-white rounded-lg border border-orange-200">
-                  <div className="text-sm text-gray-500 mb-1">预估费用</div>
-                  <div className="text-2xl font-bold text-orange-600">¥{estimatedFee.toFixed(2)}</div>
-                  <div className="text-xs text-gray-400 mt-1">按 ¥10/小时计费</div>
+                
+                {/* 右侧信息 */}
+                <div className="space-y-4">
+                  {/* 预约时间 */}
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${currentReservation.status === 'pending' ? 'bg-blue-100' : 'bg-orange-100'}`}>
+                      <Clock className={`h-5 w-5 ${currentReservation.status === 'pending' ? 'text-blue-600' : 'text-orange-600'}`} />
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">
+                        {currentReservation.status === 'pending' ? '预约开始时间' : '入场时间'}
+                      </div>
+                      <div className={`font-bold ${currentReservation.status === 'pending' ? 'text-blue-600' : 'text-orange-600'}`}>
+                        {new Date(currentReservation.start_time).toLocaleString('zh-CN', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* 预约创建时间 */}
+                  {currentReservation.reservation_time && (
+                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                      <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                        <CalendarCheck className="h-5 w-5 text-indigo-600" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500">预约创建时间</div>
+                        <div className="font-medium text-gray-700">
+                          {new Date(currentReservation.reservation_time).toLocaleString('zh-CN', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 状态指示 */}
+                  {currentReservation.status === 'pending' ? (
+                    <div className="p-4 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle className="h-5 w-5 text-blue-600" />
+                        <span className="font-semibold text-blue-700">等待入场</span>
+                      </div>
+                      <p className="text-sm text-blue-600">
+                        请在预约时间到达后前往停车场，预约时间前30分钟内可取消预约
+                      </p>
+                      <div className="mt-3 text-xs text-blue-500">
+                        预约时间到达后，车位将为您保留30分钟
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="p-4 bg-white rounded-lg border border-orange-200">
+                        <div className="text-sm text-gray-500 mb-1">已停时长</div>
+                        <div className="text-2xl font-bold text-orange-600">{parkingDuration}</div>
+                      </div>
+                      <div className="p-4 bg-white rounded-lg border border-orange-200">
+                        <div className="text-sm text-gray-500 mb-1">预估费用</div>
+                        <div className="text-2xl font-bold text-orange-600">¥{estimatedFee.toFixed(2)}</div>
+                        <div className="text-xs text-gray-400 mt-1">按 ¥10/小时计费</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-            <div className="mt-4 flex items-center justify-between p-3 bg-orange-100 rounded-lg">
-              <div className="flex items-center gap-2 text-orange-700">
-                <AlertCircle className="h-4 w-4" />
-                <span className="text-sm">结束停车将自动从余额扣除费用</span>
+            
+            {/* 操作按钮 */}
+            {currentReservation.status === 'pending' ? (
+              <div className="flex items-center justify-between p-3 bg-blue-100 rounded-lg">
+                <div className="flex items-center gap-2 text-blue-700">
+                  <AlertCircle className="h-4 w-4" />
+                  <span className="text-sm">预约时间到达前可取消预约</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline"
+                    className="border-blue-300 text-blue-600 hover:bg-blue-50"
+                    onClick={handleCancelReservation}
+                    disabled={endingParking}
+                  >
+                    {endingParking ? '处理中...' : '取消预约'}
+                  </Button>
+                  <Button 
+                    className="bg-blue-500 hover:bg-blue-600 text-white"
+                  >
+                    查看导航
+                  </Button>
+                </div>
               </div>
-              <Button 
-                className="bg-orange-500 hover:bg-orange-600 text-white"
-                onClick={handleEndParking}
-                disabled={endingParking}
-              >
-                {endingParking ? '处理中...' : '结束停车'}
-              </Button>
-            </div>
+            ) : (
+              <div className="flex items-center justify-between p-3 bg-orange-100 rounded-lg">
+                <div className="flex items-center gap-2 text-orange-700">
+                  <AlertCircle className="h-4 w-4" />
+                  <span className="text-sm">停车结束后需前往充值缴费页面缴纳费用</span>
+                </div>
+                <Button 
+                  className="bg-orange-500 hover:bg-orange-600 text-white"
+                  onClick={handleEndParking}
+                  disabled={endingParking}
+                >
+                  {endingParking ? '处理中...' : '结束停车'}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
