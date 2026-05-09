@@ -536,7 +536,7 @@ export default function UserReservation() {
                       </div>
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">立即停车</h3>
-                        <p className="text-sm text-green-600">到店即停，无需等待</p>
+                        <p className="text-sm text-green-600">到场即停，无需等待</p>
                       </div>
                     </div>
                     <p className="text-gray-600 text-sm">
@@ -572,7 +572,7 @@ export default function UserReservation() {
                       <ul className="list-disc list-inside space-y-1">
                         <li>预约停车可提前锁定车位，避免到场后无位可停</li>
                         <li>预约成功后，预约时间前30分钟内不可取消</li>
-                        <li>预约时间到达后，车位将为您保留30分钟</li>
+                        <li>预约时间到达后，车位将为您保留</li>
                         <li>超时未到场将按标准计费规则自动扣费</li>
                       </ul>
                     </div>
@@ -976,7 +976,7 @@ export default function UserReservation() {
 
                 {parkingMode === 'scheduled' && (
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                    <p>预约成功后，如需取消请在预约时间前2小时操作。超时将无法取消。</p>
+                    <p>预约成功后，如需取消请至少在预约时间前半小时取消。超时将无法取消。</p>
                   </div>
                 )}
 
