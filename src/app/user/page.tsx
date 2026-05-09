@@ -450,10 +450,10 @@ export default function UserCenter() {
                         <span className="font-semibold text-blue-700">等待入场</span>
                       </div>
                       <p className="text-sm text-blue-600">
-                        请在预约时间到达后前往停车场，预约时间前30分钟内可取消预约
+                        请在预约时间到达后前往停车场，如需取消请至少在预约时间前30分钟取消
                       </p>
                       <div className="mt-3 text-xs text-blue-500">
-                        预约时间到达后，车位将为您保留30分钟
+                        预约时间到达后，车位将为您保留
                       </div>
                     </div>
                   ) : (
@@ -478,7 +478,7 @@ export default function UserCenter() {
               <div className="flex items-center justify-between p-3 bg-blue-100 rounded-lg">
                 <div className="flex items-center gap-2 text-blue-700">
                   <AlertCircle className="h-4 w-4" />
-                  <span className="text-sm">预约时间到达前可取消预约</span>
+                  <span className="text-sm">至少在预约时间到达前30分钟取消预约</span>
                 </div>
                 <div className="flex gap-2">
                   <Button 
